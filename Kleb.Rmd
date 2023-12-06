@@ -1,0 +1,222 @@
+---
+title: "Clinical epi_Assignment 3"
+author: "Nigus Yimer"
+date: "2023-11-04"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load packages
+```{r}
+pacman::p_load("pROC",
+               "epiDisplay",
+               "PredictABEL",
+               "MASS")
+```
+
+## Import dataset
+```{r}
+kleb_dat <- read.csv("C:/Users/Administrator/OneDrive - Universiteit Antwerpen/MEPI/Clinical Epidemiology/Assignment 3/Kleb.csv")
+```
+
+## Explore the data
+```{r}
+head(kleb_dat)
+str(kleb_dat)
+```
+
+## Convert variables into factor
+
+```{r}
+predictors <- c("Age1", "Gender", "ReferalRoute1", "Bacteraemia", "SepticShock", "Apache1", "SOFA1", "Charlson1", "CVC", "UrinaryCatheter", "EndotrachealTube", "Dialysis", "ICHOperation", "CarbapenemResistance", "CoInfection", "EmpiricalAB", "DefinitiveAB", "AdjunctiveTreatment")
+
+kleb_dat[predictors] <- lapply(kleb_dat[predictors], factor)
+```
+
+## Descriptive statistics
+```{r}
+library(table1)
+
+table1(~ Age1 + Gender + ReferalRoute1 + Bacteraemia + SepticShock +  Apache1 + SOFA1 + Charlson1 + CVC + UrinaryCatheter + EndotrachealTube + Dialysis + ICHOperation + CarbapenemResistance + CoInfection + EmpiricalAB + DefinitiveAB + AdjunctiveTreatment |Status14, data= kleb_dat)
+```
+
+## Univariable analysis
+```{r}
+## Run null model
+null_model <- glm(Status14 ~ 1, family = binomial, data = kleb_dat)
+
+## Run univariable models
+age_uni <- glm(Status14 ~ Age1, family = binomial, data = kleb_dat)
+
+gender_uni <- glm(Status14 ~ Gender, family = binomial, data = kleb_dat)
+refral_uni <- glm(Status14 ~ ReferalRoute1, family = binomial, data = kleb_dat)
+bacter_uni <- glm(Status14 ~ Bacteraemia, family = binomial, data = kleb_dat)
+septic_uni <- glm(Status14 ~ SepticShock, family = binomial, data = kleb_dat)
+apache_uni <- glm(Status14 ~ Apache1, family = binomial, data = kleb_dat)
+sofa_uni <- glm(Status14 ~ SOFA1, family = binomial, data = kleb_dat)
+charlson_uni <- glm(Status14 ~ Charlson1, family = binomial, data = kleb_dat)
+cvc_uni <- glm(Status14 ~ CVC, family = binomial, data = kleb_dat)
+catheter_uni <- glm(Status14 ~ UrinaryCatheter, family = binomial, data = kleb_dat)
+ET_uni <- glm(Status14 ~ EndotrachealTube, family = binomial, data = kleb_dat)
+dialysis_uni <- glm(Status14 ~ Dialysis, family = binomial, data = kleb_dat)
+ICH_uni <- glm(Status14 ~ ICHOperation, family = binomial, data = kleb_dat)
+carb_res_uni <- glm(Status14 ~ CarbapenemResistance, family = binomial, data = kleb_dat)
+coinf_uni <- glm(Status14 ~ CoInfection, family = binomial, data = kleb_dat)
+empAB_uni <- glm(Status14 ~ EmpiricalAB, family = binomial, data = kleb_dat)
+defAB_uni <- glm(Status14 ~ DefinitiveAB, family = binomial, data = kleb_dat)
+adTx_uni <- glm(Status14 ~ AdjunctiveTreatment, family = binomial, data = kleb_dat)
+
+## Estimate and confidence interval of models
+exp(cbind(OR= coef(age_uni), confint(age_uni)))  # we'll do for other models by replacing the object
+
+## Check significance level using LRT
+lrtest(null_model, age_uni)
+lrtest(null_model, gender_uni)
+lrtest(null_model, refral_uni)
+lrtest(null_model, bacter_uni)
+lrtest(null_model, septic_uni)
+lrtest(null_model, apache_uni)
+lrtest(null_model, sofa_uni)
+lrtest(null_model, charlson_uni)
+lrtest(null_model, cvc_uni)
+lrtest(null_model, catheter_uni)
+lrtest(null_model, ET_uni)
+lrtest(null_model, dialysis_uni)
+lrtest(null_model, ICH_uni)
+lrtest(null_model, carb_res_uni)
+lrtest(null_model, coinf_uni)
+lrtest(null_model, empAB_uni)
+lrtest(null_model, defAB_uni)
+lrtest(null_model, adTx_uni)
+```
+
+
+## Multivariable logistic regression analysis--include variables at p<0.15 in the univariable analysis
+```{r}
+## run the model
+full_model <- glm(Status14 ~ Age1 + ReferalRoute1 + SepticShock + Apache1 + SOFA1 + Charlson1 + CVC + EndotrachealTube + Dialysis + ICHOperation + AdjunctiveTreatment, family = binomial, data = kleb_dat)
+
+## check multicollinearity 
+library(car)
+vif(full_model)
+```
+
+## Model reduction
+```{r}
+library(MASS)
+stepAIC(full_model)
+```
+
+## Final model
+```{r}
+# Run the model in the final step with low AIC
+final_model <- stepAIC(full_model)
+
+## obtain ORs and CIs
+ORCI_finalmodel <- exp(cbind(OR= coef(final_model), confint(final_model)))
+round(ORCI_finalmodel, digits = 3)
+```
+
+## Model performance
+```{r}
+## Predicted probabilities 
+prediction <- predict(final_model, type = "response")
+
+## Calibration
+plotCalibration(kleb_dat, 20, prediction, groups = 10)
+
+## Discrimination
+roc(kleb_dat$Status14, prediction, plot= TRUE, print.auc= TRUE, ci= TRUE)
+```
+
+## Simplified risk score
+```{r}
+## Obtain regression coefficinents of the final model
+summary(final_model)
+
+## Weight of predictors (age has the smallest coefficient: 0.88 ~ 1)
+
+age_wt <- 0.88/0.88      # ~1
+referal_wt <- 1.11/0.88  # ~1
+SOFA1_wt <- 1.30/0.88    # ~1
+SOFA2_wt <- 2.29/0.88    # ~3
+CVC_wt <- 1.52/0.88      # ~2
+ICH_wt <- 1.73/0.88      # ~2
+adjTx_wt <- 2.97/0.88    # ~3
+
+
+## Total score
+Total_score <- (1*0.88) + (1*1.11) + (1*1.30) + (3*2.29) + (2*1.52) + (2*1.73) + (3*2.97)
+
+
+### Mortality score corresponding to  score 0
+length(kleb_dat$ID[kleb_dat$total_score=="0" & kleb_dat$Status14=="1"])/ length(kleb_dat$ID[kleb_dat$total_score=="0"])
+
+### Mortality score corresponding to  score 1
+length(kleb_dat$ID[kleb_dat$total_score=="1" & kleb_dat$Status14=="1"])/ length(kleb_dat$ID[kleb_dat$total_score=="1"])
+
+### Mortality score corresponding to  score 2
+## Total score for each patient
+kleb_dat$Age1 <- as.numeric(levels(kleb_dat$Age1)[kleb_dat$Age1])
+kleb_dat$ReferalRoute1 <- as.numeric(levels(kleb_dat$ReferalRoute1)[kleb_dat$ReferalRoute1])
+kleb_dat$SOFA1_1[kleb_dat$SOFA1=="0"|kleb_dat$SOFA1=="2"]= 0
+kleb_dat$SOFA1_1[kleb_dat$SOFA1=="1"]= 1
+kleb_dat$SOFA1_2[kleb_dat$SOFA1=="0"|kleb_dat$SOFA1=="1"]= 0
+kleb_dat$SOFA1_2[kleb_dat$SOFA1=="2"]= 1
+kleb_dat$CVC <- as.numeric(levels(kleb_dat$CVC)[kleb_dat$CVC])
+kleb_dat$ICHOperation <- as.numeric(levels(kleb_dat$ICHOperation)[kleb_dat$ICHOperation])
+kleb_dat$AdjunctiveTreatment <- as.numeric(levels(kleb_dat$AdjunctiveTreatment)[kleb_dat$AdjunctiveTreatment])
+
+## Formula for the score--adds column for total score
+kleb_dat$total_score <- 1*kleb_dat$Age1 + 1*kleb_dat$ReferalRoute1 + 1*kleb_dat$SOFA1_1 + 3*kleb_dat$SOFA1_2 + 2*kleb_dat$CVC + 2*kleb_dat$ICHOperation + 3*kleb_dat$AdjunctiveTreatment
+
+## Mortality risk corresponding to each score
+length(kleb_dat$ID[kleb_dat$total_score=="2" & kleb_dat$Status14=="1"])/ length(kleb_dat$ID[kleb_dat$total_score=="2"])
+
+### Mortality score corresponding to  score 3
+length(kleb_dat$ID[kleb_dat$total_score=="3" & kleb_dat$Status14=="1"])/ length(kleb_dat$ID[kleb_dat$total_score=="3"])
+
+### Mortality score corresponding to  score 4
+length(kleb_dat$ID[kleb_dat$total_score=="4" & kleb_dat$Status14=="1"])/ length(kleb_dat$ID[kleb_dat$total_score=="4"])
+
+### Mortality score corresponding to  score 5
+length(kleb_dat$ID[kleb_dat$total_score=="5" & kleb_dat$Status14=="1"])/ length(kleb_dat$ID[kleb_dat$total_score=="5"])
+
+### Mortality score corresponding to  score 6
+length(kleb_dat$ID[kleb_dat$total_score=="6" & kleb_dat$Status14=="1"])/ length(kleb_dat$ID[kleb_dat$total_score=="6"])
+
+### Mortality score corresponding to  score 7
+length(kleb_dat$ID[kleb_dat$total_score=="7" & kleb_dat$Status14=="1"])/ length(kleb_dat$ID[kleb_dat$total_score=="7"])
+
+### Mortality score corresponding to  score 8
+length(kleb_dat$ID[kleb_dat$total_score=="8" & kleb_dat$Status14=="1"])/ length(kleb_dat$ID[kleb_dat$total_score=="8"])
+
+### Mortality score corresponding to  score 9
+length(kleb_dat$ID[kleb_dat$total_score=="9" & kleb_dat$Status14=="1"])/ length(kleb_dat$ID[kleb_dat$total_score=="9"])
+
+### Mortality score corresponding to  score 10
+length(kleb_dat$ID[kleb_dat$total_score=="10" & kleb_dat$Status14=="1"])/ length(kleb_dat$ID[kleb_dat$total_score=="10"])
+
+tab <- table(kleb_dat$total_score)   # to get number of patients in each score
+tab_percent <- tab / sum(tab) * 100  # to obtain percentage
+
+## Risk stratification plot
+library(ggplot2)
+
+### store scores and risks
+risk_score <- c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+mortality_risks <- c(0, 0.038, 0.089, 0.11, 0.33, 0.52, 0.64, 0.77, 1, 1, 1)
+
+### create data fram
+score_risk <- data.frame(risk_score, mortality_risks)
+
+### plot
+ggplot(score_risk, aes(risk_score, mortality_risks)) + geom_line(colour= "red") + geom_point() + labs(title = "Risk stratification plot for 14-day mortality of ICU patients infected with K. pneumoniae", x= "Risk scores", y= "Mortality risks") + theme(plot.title = element_text(size = 10))
+```
+
+
