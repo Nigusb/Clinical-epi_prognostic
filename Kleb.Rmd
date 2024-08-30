@@ -1,5 +1,5 @@
 ---
-title: "Clinical epi_Assignment 3"
+title: "Prognostic model"
 author: "Nigus Yimer"
 date: "2023-11-04"
 output:
